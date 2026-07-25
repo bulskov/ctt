@@ -217,6 +217,26 @@ AddressSanitizer, `SIGSEGV`/`SIGBUS` are left to ASan for richer diagnostics.
 
 ---
 
+## Developing ctt
+
+ctt has its own tests under `tests/`:
+
+- `self_tests.c` — positive paths, running ctt on itself (every assertion
+  passes; short and prefixed spellings; hooks fire).
+- `behavior_tests.sh` — the negative/crash paths that can't be asserted from
+  inside a passing run (a failing assertion is reported and the run continues,
+  setup abort, crash isolation, `--filter`, `--stop-on-failure`, exit codes). It
+  compiles small crafted suites and checks their output + exit codes.
+
+Both are wired into CTest:
+
+```sh
+cmake -B build && cmake --build build
+cd build && ctest --output-on-failure
+```
+
+`behavior_tests.sh` also runs standalone: `tests/behavior_tests.sh [CC] [CTT_ROOT]`.
+
 ## License
 
 MIT — see [LICENSE](LICENSE).

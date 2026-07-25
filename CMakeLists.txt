@@ -18,6 +18,7 @@ else()
 endif()
 
 option(CTT_BUILD_EXAMPLES "Build ctt examples" ${CTT_TOP_LEVEL})
+option(CTT_BUILD_TESTS "Build ctt's own test suite" ${CTT_TOP_LEVEL})
 option(CTT_INSTALL "Generate install rules for ctt" ${CTT_TOP_LEVEL})
 
 include(GNUInstallDirs)  # define CMAKE_INSTALL_* before they are used below
@@ -34,12 +35,30 @@ target_include_directories(ctt PUBLIC
 
 target_compile_features(ctt PUBLIC c_std_11)
 
-# --- Examples / self-tests -------------------------------------------------
-if(CTT_BUILD_EXAMPLES)
+# --- Examples + tests ------------------------------------------------------
+if(CTT_BUILD_EXAMPLES OR CTT_BUILD_TESTS)
     enable_testing()
+endif()
+
+if(CTT_BUILD_EXAMPLES)
     add_executable(ctt_example examples/example_tests.c)
     target_link_libraries(ctt_example PRIVATE ctt::ctt)
     add_test(NAME ctt_example COMMAND ctt_example)
+endif()
+
+if(CTT_BUILD_TESTS)
+    # Positive paths: ctt asserting on itself.
+    add_executable(ctt_self_tests tests/self_tests.c)
+    target_link_libraries(ctt_self_tests PRIVATE ctt::ctt)
+    add_test(NAME ctt_self_tests COMMAND ctt_self_tests)
+
+    # Negative/crash paths: a shell driver that compiles crafted suites and
+    # inspects their output + exit codes. POSIX shell only.
+    if(NOT WIN32)
+        add_test(NAME ctt_behavior
+            COMMAND bash ${CMAKE_CURRENT_SOURCE_DIR}/tests/behavior_tests.sh
+                    ${CMAKE_C_COMPILER} ${CMAKE_CURRENT_SOURCE_DIR})
+    endif()
 endif()
 
 # --- Install / find_package(ctt) ------------------------------------------
