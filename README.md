@@ -64,6 +64,51 @@ cc -Iinclude my_tests.c path/to/ctt/src/ctt.c -o my_tests
 
 ---
 
+## Building with Make
+
+For a minimal, runnable example see [`examples/Makefile`](examples/Makefile) —
+it builds the example suite with sanitizers in ~15 lines (`make` in `examples/`).
+
+For a real project with several suites, this **starter** auto-discovers every
+`tests/*_tests.c` and builds one binary each — the pattern people usually
+reinvent:
+
+```make
+#   make            build + run every suite
+#   make test_foo   build + run tests/foo_tests.c
+#   make clean
+CC     := cc
+BUILD  := build
+CTT    := third_party/ctt          # dir containing ctt's include/ and src/
+SAN    ?= -fsanitize=address,undefined -fno-omit-frame-pointer
+CFLAGS := -I$(CTT)/include -Iinclude -g -Wall -Wextra $(SAN)
+
+LIB_SRCS  := $(shell find src -name '*.c')          # your code under test
+TEST_SRCS := $(wildcard tests/*_tests.c)
+TEST_BINS := $(patsubst tests/%.c,$(BUILD)/%,$(TEST_SRCS))
+
+.PHONY: test clean
+test: $(TEST_BINS)
+	@for t in $(TEST_BINS); do echo "▶ $$t"; $$t || exit $$?; done
+
+$(BUILD)/%: tests/%.c $(CTT)/src/ctt.c $(LIB_SRCS) | $(BUILD)
+	$(CC) $(CFLAGS) $< $(CTT)/src/ctt.c $(LIB_SRCS) -o $@
+
+test_%: $(BUILD)/%_tests
+	@$<
+
+$(BUILD):
+	mkdir -p $(BUILD)
+
+clean:
+	rm -rf $(BUILD)
+```
+
+Adding a test suite is then just dropping in a new `tests/<name>_tests.c` — no
+Makefile edit. `make SAN=` builds without sanitizers if the runtime is missing.
+
+---
+
 ## Writing tests
 
 ```c
