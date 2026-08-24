@@ -124,6 +124,18 @@ void ctt_register(const char *name, ctt_test_fn func);
         CTT_ABORT_();                                                                     \
     } while (0)
 
+/* Unconditional failure with a printf-style message.  Use when the useful
+   diagnostic is computed, not a fixed string. */
+#define CTT_FAILF(...)                                                                    \
+    do                                                                                    \
+    {                                                                                     \
+        printf("  " CTT_COL_RED CTT_CROSS " FAIL: ");                                     \
+        printf(__VA_ARGS__);                                                              \
+        printf(CTT_COL_RESET "\n");                                                       \
+        CTT_FAIL_LOC_();                                                                  \
+        CTT_ABORT_();                                                                     \
+    } while (0)
+
 #define CTT_ASSERT(condition)                                                             \
     do                                                                                    \
     {                                                                                     \
@@ -214,6 +226,36 @@ void ctt_register(const char *name, ctt_test_fn func);
         {                                                                                       \
             printf("  " CTT_COL_RED CTT_CROSS " FAIL: Expected '%s', got '%s'" CTT_COL_RESET     \
                    "\n", (expected), (actual));                                                 \
+            CTT_FAIL_LOC_();                                                                    \
+            CTT_ABORT_();                                                                       \
+        }                                                                                       \
+    } while (0)
+
+/* Substring search.  On failure both the needle and the full haystack are
+   printed, which is what you want when the haystack is generated output. */
+#define CTT_ASSERT_STR_CONTAINS(haystack, needle)                                               \
+    do                                                                                          \
+    {                                                                                           \
+        const char *ctt_h_ = (haystack);                                                        \
+        const char *ctt_n_ = (needle);                                                          \
+        if (ctt_h_ == NULL || strstr(ctt_h_, ctt_n_) == NULL)                                   \
+        {                                                                                       \
+            printf("  " CTT_COL_RED CTT_CROSS " FAIL: Expected to find '%s' in:" CTT_COL_RESET   \
+                   "\n%s\n", ctt_n_, ctt_h_ ? ctt_h_ : "(null)");                               \
+            CTT_FAIL_LOC_();                                                                    \
+            CTT_ABORT_();                                                                       \
+        }                                                                                       \
+    } while (0)
+
+#define CTT_ASSERT_STR_NOT_CONTAINS(haystack, needle)                                           \
+    do                                                                                          \
+    {                                                                                           \
+        const char *ctt_h_ = (haystack);                                                        \
+        const char *ctt_n_ = (needle);                                                          \
+        if (ctt_h_ != NULL && strstr(ctt_h_, ctt_n_) != NULL)                                   \
+        {                                                                                       \
+            printf("  " CTT_COL_RED CTT_CROSS " FAIL: Expected NOT to find '%s' in:"             \
+                   CTT_COL_RESET "\n%s\n", ctt_n_, ctt_h_);                                     \
             CTT_FAIL_LOC_();                                                                    \
             CTT_ABORT_();                                                                       \
         }                                                                                       \
@@ -339,6 +381,7 @@ int ctt_main(int argc, char *argv[], const char *suite_title);
 #define TEST CTT_TEST
 #define TEST_NAMED CTT_TEST_NAMED
 #define FAIL CTT_FAIL
+#define FAILF CTT_FAILF
 #define ASSERT CTT_ASSERT
 #define ASSERT_EQ CTT_ASSERT_EQ
 #define ASSERT_NE CTT_ASSERT_NE
@@ -354,6 +397,8 @@ int ctt_main(int argc, char *argv[], const char *suite_title);
 #define ASSERT_PTR_NE CTT_ASSERT_PTR_NE
 #define ASSERT_STR_EQ CTT_ASSERT_STR_EQ
 #define ASSERT_STRN_EQ CTT_ASSERT_STRN_EQ
+#define ASSERT_STR_CONTAINS CTT_ASSERT_STR_CONTAINS
+#define ASSERT_STR_NOT_CONTAINS CTT_ASSERT_STR_NOT_CONTAINS
 #define ASSERT_ARRAY_EQ CTT_ASSERT_ARRAY_EQ
 #define ASSERT_FLOAT_EQ CTT_ASSERT_FLOAT_EQ
 #define TEST_INFO CTT_INFO

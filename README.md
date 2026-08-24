@@ -163,9 +163,12 @@ anywhere the test reaches — including the hooks and helper functions.
 | `ASSERT_PTR_EQ(a,b)` / `ASSERT_PTR_NE(a,b)` | pointers equal / differ |
 | `ASSERT_STR_EQ(a,b)` | `strcmp(a,b) == 0` |
 | `ASSERT_STRN_EQ(a,b,n)` | `strncmp(a,b,n) == 0` |
+| `ASSERT_STR_CONTAINS(h,n)` | `n` occurs in `h`; on failure prints both |
+| `ASSERT_STR_NOT_CONTAINS(h,n)` | `n` does not occur in `h` |
 | `ASSERT_ARRAY_EQ(a,b,n)` | first `n` int elements equal |
 | `ASSERT_FLOAT_EQ(a,b,tol)` | `|a - b| <= tol` |
 | `FAIL("msg")` | never — fails immediately with a message |
+| `FAILF(fmt, ...)` | never — like `FAIL` with printf-style formatting |
 
 `TEST_INFO("fmt", ...)` prints only under `-v`; `TEST_WARN(...)` always prints.
 Neither fails the test.
