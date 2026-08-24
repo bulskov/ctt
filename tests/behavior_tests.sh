@@ -230,6 +230,35 @@ else
 fi
 
 # --------------------------------------------------------------------------
+# The POSIX signal API ctt relies on (sigaction, sigsetjmp, SIGBUS) is hidden by
+# glibc under a strict -std=c99, so ctt.h asks for it via _POSIX_C_SOURCE before
+# including anything. Building AND running here: a fallback that merely compiled
+# would still have to catch a crash to be worth anything.
+section "builds and runs clean under a strict -std=c99"
+cat > "$WORK/c9.c" <<'EOF'
+#include "ctt.h"
+void ctt_before_each(void) {}
+void ctt_after_each(void) {}
+TEST(c99_assert)  { ASSERT_STR_CONTAINS("hello world", "lo wo"); }
+TEST(c99_crash)   { int *p = 0; *p = 5; }
+TEST(c99_after)   { ASSERT_TRUE(1); }
+int main(int c, char **v) { return ctt_main(c, v, "c9"); }
+EOF
+if ! "$CC" -std=c99 -E - </dev/null >/dev/null 2>&1; then
+    ok "skipped - $CC does not accept -std=c99"
+elif "$CC" -std=c99 -Wall -Wextra -Wpedantic -I"$INC" -g -O0 \
+        "$WORK/c9.c" "$IMPL" -o "$WORK/c9" 2>"$WORK/cc.log"; then
+    wantnot "$(cat "$WORK/cc.log")" "warning:" "no warnings under -Wall -Wextra -Wpedantic"
+    raw="$("$WORK/c9" 2>&1)"; rc=$?; out="$(strip "$raw")"
+    code "$rc" 1 "exits 1"
+    want "$out" "Running: c99_assert" "assertions work under c99"
+    want "$out" "CRASH" "the crash handler still works under c99"
+    want "$out" "Running: c99_after" "runner continued after the crash"
+else
+    bad "case c9 failed to compile under -std=c99"; cat "$WORK/cc.log"
+fi
+
+# --------------------------------------------------------------------------
 printf '\n'
 if [ "$fails" -eq 0 ]; then
     printf 'behavior_tests: all checks passed\n'

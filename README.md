@@ -13,6 +13,10 @@ and a clean CMake target for `FetchContent`.
 
 Requires GCC or Clang (uses `__attribute__((constructor))` and weak symbols).
 
+Under a strict `-std=c99` include `ctt.h` before any standard header: it asks
+glibc for the POSIX signal API it needs, and a feature-test macro only counts
+before the first libc header. The default `-std=gnu*` modes are unaffected.
+
 ---
 
 ## Install

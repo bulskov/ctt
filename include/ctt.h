@@ -26,6 +26,25 @@
 #ifndef CTT_H
 #define CTT_H
 
+/* ctt catches crashes with sigaction() and unwinds out of the handler with
+   sigsetjmp/siglongjmp. Those are POSIX, not ISO C, and a strict -std=c99
+   makes glibc hide them, so ask for them before including anything.
+   Only under __STRICT_ANSI__: in the default -std=gnu* modes glibc
+   already exposes them, and naming a feature macro there would *narrow* what
+   the rest of the translation unit sees. */
+#if defined(__STRICT_ANSI__) && !defined(_WIN32) &&                                       \
+    !defined(_POSIX_C_SOURCE) && !defined(_XOPEN_SOURCE) &&                               \
+    !defined(_GNU_SOURCE) && !defined(_DEFAULT_SOURCE) && !defined(_BSD_SOURCE)
+/* Feature macros only take effect before the first libc header. __GLIBC__ is
+   defined by <features.h>, so seeing it here means one was already included
+   and we are too late to ask — say so plainly instead of failing later with a
+   confusing "unknown type name 'sigjmp_buf'". */
+#if defined(__GLIBC__)
+#error "ctt.h must be included before any standard header when compiling with -std=c99 (or compile with -D_POSIX_C_SOURCE=200809L)"
+#endif
+#define _POSIX_C_SOURCE 200809L
+#endif
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
