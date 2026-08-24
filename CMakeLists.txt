@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.14)  # FetchContent_MakeAvailable
 
 project(ctt
-    VERSION 0.1.0
+    VERSION 0.2.0
     DESCRIPTION "A tiny single-header C unit-test library"
     HOMEPAGE_URL "https://github.com/bulskov/ctt"
     LANGUAGES C)

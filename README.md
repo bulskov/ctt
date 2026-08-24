@@ -23,7 +23,7 @@ Requires GCC or Clang (uses `__attribute__((constructor))` and weak symbols).
 include(FetchContent)
 FetchContent_Declare(ctt
     GIT_REPOSITORY https://github.com/bulskov/ctt.git
-    GIT_TAG v0.1.0)
+    GIT_TAG v0.2.0)
 FetchContent_MakeAvailable(ctt)
 
 add_executable(my_tests test/my_tests.c)
