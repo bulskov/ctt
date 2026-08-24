@@ -69,6 +69,31 @@ CTT_TEST(strings)
     ASSERT_STRN_EQ("hello", "help", 3); /* "hel" == "hel" */
 }
 
+CTT_TEST(substrings)
+{
+    ASSERT_STR_CONTAINS("hello world", "lo wo"); /* middle */
+    ASSERT_STR_CONTAINS("hello world", "hello"); /* at the start */
+    ASSERT_STR_CONTAINS("hello world", "world"); /* at the end */
+    ASSERT_STR_CONTAINS("hello", "hello");       /* whole haystack */
+    ASSERT_STR_CONTAINS("hello", "");            /* empty needle is always found */
+
+    ASSERT_STR_NOT_CONTAINS("hello world", "zzz");
+    ASSERT_STR_NOT_CONTAINS("hello", "hello!");  /* needle longer than haystack */
+    ASSERT_STR_NOT_CONTAINS("hello", "HELLO");   /* the search is case-sensitive */
+    ASSERT_STR_NOT_CONTAINS("", "x");            /* empty haystack */
+}
+
+/* The generated-output case these macros exist for: a multi-line buffer
+   searched for a line that should (or should not) be in it. */
+CTT_TEST(substrings_multiline)
+{
+    const char *out = "compiling foo.c\nwarning: unused variable 'x'\ndone\n";
+
+    ASSERT_STR_CONTAINS(out, "warning: unused variable 'x'");
+    ASSERT_STR_CONTAINS(out, "\ndone\n");
+    ASSERT_STR_NOT_CONTAINS(out, "error:");
+}
+
 CTT_TEST(arrays)
 {
     int expected[] = {1, 2, 3};
@@ -87,6 +112,8 @@ CTT_TEST(prefixed_names_work)
     CTT_ASSERT_EQ(2, 2);
     CTT_ASSERT_TRUE(1);
     CTT_ASSERT_STR_EQ("x", "x");
+    CTT_ASSERT_STR_CONTAINS("xyz", "y");
+    CTT_ASSERT_STR_NOT_CONTAINS("xyz", "q");
 }
 
 TEST_NAMED(custom_label, "a custom display label")

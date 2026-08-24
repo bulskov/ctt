@@ -148,6 +148,88 @@ else
 fi
 
 # --------------------------------------------------------------------------
+section "a failing substring assertion prints the needle and the whole haystack"
+cat > "$WORK/c6.c" <<'EOF'
+#include "ctt.h"
+void ctt_before_each(void) {}
+void ctt_after_each(void) {}
+TEST(missing_needle) {
+    const char *out = "compiling foo.c\nwarning: bad thing\ndone\n";
+    ASSERT_STR_CONTAINS(out, "error: not here");
+}
+TEST(unwanted_needle) {
+    ASSERT_STR_NOT_CONTAINS("compiling foo.c\nerror: boom\n", "error:");
+}
+TEST(c6_after) { ASSERT_TRUE(1); }
+int main(int c, char **v) { return ctt_main(c, v, "c6"); }
+EOF
+if build "$WORK/c6.c" "$WORK/c6"; then
+    raw="$("$WORK/c6" 2>&1)"; rc=$?; out="$(strip "$raw")"
+    code "$rc" 1 "exits 1"
+    want "$out" "Expected to find 'error: not here' in:" "CONTAINS names the needle"
+    want "$out" "compiling foo.c" "CONTAINS prints the haystack"
+    want "$out" "warning: bad thing" "CONTAINS prints every line of the haystack"
+    want "$out" "Expected NOT to find 'error:' in:" "NOT_CONTAINS names the needle"
+    want "$out" "error: boom" "NOT_CONTAINS prints the haystack"
+    want "$out" "Running: c6_after" "runner continued past both failures"
+    want "$out" "Failed: 2" "both substring assertions failed"
+else
+    bad "case c6 failed to compile"; cat "$WORK/cc.log"
+fi
+
+# --------------------------------------------------------------------------
+# The two macros treat a NULL haystack differently, on purpose: CONTAINS cannot
+# find anything in NULL so it fails (printing "(null)" rather than crashing),
+# while NOT_CONTAINS is satisfied — NULL holds no needle. Pinned here so the
+# asymmetry is a decision rather than an accident.
+section "a NULL haystack fails CONTAINS and passes NOT_CONTAINS"
+cat > "$WORK/c7.c" <<'EOF'
+#include "ctt.h"
+void ctt_before_each(void) {}
+void ctt_after_each(void) {}
+TEST(null_contains)     { const char *p = NULL; ASSERT_STR_CONTAINS(p, "x"); }
+TEST(null_not_contains) { const char *p = NULL; ASSERT_STR_NOT_CONTAINS(p, "x"); }
+int main(int c, char **v) { return ctt_main(c, v, "c7"); }
+EOF
+if build "$WORK/c7.c" "$WORK/c7"; then
+    raw="$("$WORK/c7" 2>&1)"; rc=$?; out="$(strip "$raw")"
+    code "$rc" 1 "exits 1"
+    want "$out" "(null)" "NULL haystack is reported, not dereferenced"
+    want "$out" "• null_contains" "CONTAINS fails on a NULL haystack"
+    wantnot "$out" "• null_not_contains" "NOT_CONTAINS passes on a NULL haystack"
+    want "$out" "Failed: 1" "exactly one of the two failed"
+else
+    bad "case c7 failed to compile"; cat "$WORK/cc.log"
+fi
+
+# --------------------------------------------------------------------------
+section "FAILF formats its message and fails immediately"
+cat > "$WORK/c8.c" <<'EOF'
+#include "ctt.h"
+void ctt_before_each(void) {}
+void ctt_after_each(void) {}
+TEST(failf_formats) {
+    int n = 42;
+    FAILF("computed %d for %s", n, "the widget");
+    printf("UNREACHABLE\n");
+}
+TEST(failf_bare_format) { FAILF("no varargs here"); }
+TEST(c8_after) { ASSERT_TRUE(1); }
+int main(int c, char **v) { return ctt_main(c, v, "c8"); }
+EOF
+if build "$WORK/c8.c" "$WORK/c8"; then
+    raw="$("$WORK/c8" 2>&1)"; rc=$?; out="$(strip "$raw")"
+    code "$rc" 1 "exits 1"
+    want "$out" "FAIL: computed 42 for the widget" "printf-style arguments are formatted"
+    wantnot "$out" "UNREACHABLE" "FAILF aborts the rest of the test"
+    want "$out" "FAIL: no varargs here" "a lone format string works"
+    want "$out" "Running: c8_after" "runner continued past both failures"
+    want "$out" "Failed: 2" "both FAILF tests failed"
+else
+    bad "case c8 failed to compile"; cat "$WORK/cc.log"
+fi
+
+# --------------------------------------------------------------------------
 printf '\n'
 if [ "$fails" -eq 0 ]; then
     printf 'behavior_tests: all checks passed\n'
