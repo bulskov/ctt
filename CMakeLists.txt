@@ -33,7 +33,11 @@ target_include_directories(ctt PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
     $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>)
 
-target_compile_features(ctt PUBLIC c_std_11)
+# C99 is the real floor: ctt uses declarations in for-loops and other C99
+# constructs, but nothing from C11. PUBLIC so consumers inherit it. This is a
+# floor, not a pin — CMake only raises a compiler that would default lower, so
+# a consumer already on C17 is left alone.
+target_compile_features(ctt PUBLIC c_std_99)
 
 # --- Examples + tests ------------------------------------------------------
 if(CTT_BUILD_EXAMPLES OR CTT_BUILD_TESTS)
