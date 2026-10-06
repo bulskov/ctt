@@ -19,7 +19,7 @@
  * unprefixed macro aliases are provided by default for ergonomic tests.
  *
  * Portable to GCC and Clang on POSIX systems, and to MSVC, clang-cl and
- * MinGW on Windows. Test auto-registration uses __attribute__((constructor))
+ * clang on Windows. Test auto-registration uses __attribute__((constructor))
  * (a .CRT$XCU initializer on MSVC); the optional lifecycle hooks are weak
  * symbols (/alternatename on MSVC).
  *

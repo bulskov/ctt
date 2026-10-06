@@ -11,9 +11,10 @@ and a clean CMake target for `FetchContent`.
 - **Namespaced** — `CTT_*` macros and `ctt_*` symbols, with optional short
   aliases (`TEST`, `ASSERT_EQ`, …) on by default.
 
-Builds with GCC or Clang on Linux, macOS and the BSDs, and with MSVC, clang-cl
-or MinGW on Windows. Under MSVC, test function names must be unique across the
-whole executable, not just within one `.c` file.
+Builds with GCC or Clang on Linux, macOS and the BSDs, and with MSVC (`cl`),
+`clang-cl` or `clang` on Windows. With MSVC or Clang on Windows, test function
+names must be unique across the whole executable, not just within one `.c`
+file.
 
 Under a strict `-std=c99` include `ctt.h` before any standard header: it asks
 glibc for the POSIX signal API it needs, and a feature-test macro only counts
@@ -66,6 +67,13 @@ Include plain `#include "ctt.h"` everywhere else. Or just compile the provided
 
 ```sh
 cc -Iinclude my_tests.c path/to/ctt/src/ctt.c -o my_tests
+```
+
+On Windows, from a Developer Command Prompt:
+
+```bat
+cl /W4 /Iinclude my_tests.c path\to\ctt\src\ctt.c /Fe:my_tests.exe
+clang-cl /W4 /Iinclude my_tests.c path\to\ctt\src\ctt.c /Fe:my_tests.exe
 ```
 
 ---
@@ -137,6 +145,8 @@ int main(int argc, char *argv[])
   label. `TEST_NAMED(name, "label")` sets a custom label.
 - `ctt_main()` parses flags, runs every registered test, prints a summary, and
   returns the exit code (`0` = all passed). Pass `NULL` for no banner.
+- Tests run in source order within each file, including under link-time
+  optimization (`-flto`, `/GL`).
 
 ### Setup / teardown
 
@@ -220,14 +230,14 @@ or CI.
 ## Sanitizers & crashes
 
 Build your tests with `-fsanitize=address,undefined` for leak / use-after-free /
-UB detection. `SIGSEGV`, `SIGBUS`, `SIGABRT`, and `SIGFPE` are caught: the
+UB detection (with MSVC, `/fsanitize=address`). `SIGSEGV`, `SIGBUS`, `SIGABRT`, and `SIGFPE` are caught: the
 faulting test is reported as `CRASHED` and the runner moves on. Under
 AddressSanitizer, `SIGSEGV`/`SIGBUS` are left to ASan for richer diagnostics.
 
-On Windows the same crashes are caught. MSVC and clang-cl use structured
-exception handling: access violations, integer and floating-point faults and
-illegal instructions are reported under the matching signal name. MinGW uses
-the CRT's `signal()`. A stack overflow is not caught on Windows.
+On Windows the same crashes are caught using structured exception handling:
+access violations, integer and floating-point faults and illegal instructions
+are reported under the matching signal name, and `abort()` as `SIGABRT`. A
+stack overflow is not caught on Windows.
 
 ---
 
@@ -250,6 +260,8 @@ cd build && ctest --output-on-failure
 ```
 
 `behavior_tests.sh` also runs standalone: `tests/behavior_tests.sh [CC] [CTT_ROOT]`.
+It needs bash, so CTest skips it on Windows; there only `self_tests.c` and the
+example run.
 
 ## License
 
