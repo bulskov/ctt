@@ -101,6 +101,8 @@ typedef struct
 {
     const char *name;
     ctt_test_fn func;
+    const char *file; /* where the test was declared; NULL if unknown */
+    int line;
 } Ctt_TestCase;
 
 typedef struct
@@ -123,6 +125,9 @@ extern CTT_JMP_BUF ctt_jmp_buf;
 
 /* Called by the CTT_TEST macro's constructor before main(). */
 void ctt_register(const char *name, ctt_test_fn func);
+/* As ctt_register, but records the source location so tests run in source
+   order even when the linker reorders the constructors (MSVC with /GL). */
+void ctt_register_at(const char *name, ctt_test_fn func, const char *file, int line);
 
 /* ------------------------------------------------------------------ */
 /* Test declaration + auto-registration                                */
@@ -152,7 +157,7 @@ void ctt_register(const char *name, ctt_test_fn func);
     static void fn(void);                                              \
     CTT_CONSTRUCTOR_(ctt_reg_##fn)                                     \
     {                                                                  \
-        ctt_register(label, fn);                                       \
+        ctt_register_at(label, fn, __FILE__, __LINE__);                \
     }                                                                  \
     static void fn(void)
 
@@ -526,6 +531,11 @@ static void ctt_copy_str(char *dst, size_t size, const char *src)
 
 void ctt_register(const char *name, ctt_test_fn func)
 {
+    ctt_register_at(name, func, NULL, 0);
+}
+
+void ctt_register_at(const char *name, ctt_test_fn func, const char *file, int line)
+{
     if (ctt_registered_count >= CTT_MAX_TESTS)
     {
         fprintf(stderr, "ctt: too many tests (max %d)\n", CTT_MAX_TESTS);
@@ -533,7 +543,49 @@ void ctt_register(const char *name, ctt_test_fn func)
     }
     ctt_registry[ctt_registered_count].name = name;
     ctt_registry[ctt_registered_count].func = func;
+    ctt_registry[ctt_registered_count].file = file;
+    ctt_registry[ctt_registered_count].line = line;
     ctt_registered_count++;
+}
+
+/* Constructors usually run in source order, but MSVC's whole-program
+   optimization (/GL) shuffles them. Restore source order: tests from one file
+   by line, files in the order they first registered. Insertion sort is
+   stable, so tests without a location keep their registration order. */
+static int ctt_same_file(const char *a, const char *b)
+{
+    return a == b || (a && b && strcmp(a, b) == 0);
+}
+
+static int ctt_file_rank(const char *file)
+{
+    int i = 0;
+    while (!ctt_same_file(ctt_registry[i].file, file))
+        i++;
+    return i;
+}
+
+static void ctt_sort_registry(void)
+{
+    /* Rank files before moving anything, by their first registration. */
+    static int rank[CTT_MAX_TESTS];
+    for (int i = 0; i < ctt_registered_count; i++)
+        rank[i] = ctt_registry[i].file ? ctt_file_rank(ctt_registry[i].file) : i;
+
+    for (int i = 1; i < ctt_registered_count; i++)
+    {
+        Ctt_TestCase tc = ctt_registry[i];
+        int r = rank[i];
+        int j = i - 1;
+        while (j >= 0 && (rank[j] > r || (rank[j] == r && ctt_registry[j].line > tc.line)))
+        {
+            ctt_registry[j + 1] = ctt_registry[j];
+            rank[j + 1] = rank[j];
+            j--;
+        }
+        ctt_registry[j + 1] = tc;
+        rank[j + 1] = r;
+    }
 }
 
 void ctt_init(void)
@@ -758,6 +810,7 @@ void ctt_run_one(const char *name, ctt_test_fn func)
 int ctt_run_all(void)
 {
     ctt_install_crash_handlers();
+    ctt_sort_registry();
 
     for (int i = 0; i < ctt_registered_count; i++)
     {
