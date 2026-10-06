@@ -29,7 +29,7 @@ before the first libc header. The default `-std=gnu*` modes are unaffected.
 include(FetchContent)
 FetchContent_Declare(ctt
     GIT_REPOSITORY https://github.com/bulskov/ctt.git
-    GIT_TAG v0.2.1)
+    GIT_TAG v0.3.0)
 FetchContent_MakeAvailable(ctt)
 
 add_executable(my_tests test/my_tests.c)
