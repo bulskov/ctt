@@ -11,8 +11,14 @@
 static int stack[CAP];
 static int depth;
 
-static int push(int v) { return depth < CAP ? (stack[depth++] = v, 1) : 0; }
-static int pop(void)   { return stack[--depth]; }
+static int push(int v)
+{
+    return depth < CAP ? (stack[depth++] = v, 1) : 0;
+}
+static int pop(void)
+{
+    return stack[--depth];
+}
 
 /* Optional per-test fixture reset. Defining ctt_before_each overrides the
    library's weak default. */

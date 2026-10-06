@@ -14,8 +14,14 @@
 static int before_ran;
 static int after_ran;
 
-void ctt_before_each(void) { before_ran = 1; }
-void ctt_after_each(void) { after_ran = 1; }
+void ctt_before_each(void)
+{
+    before_ran = 1;
+}
+void ctt_after_each(void)
+{
+    after_ran = 1;
+}
 
 CTT_TEST(before_each_runs)
 {
@@ -75,12 +81,14 @@ CTT_TEST(substrings)
     ASSERT_STR_CONTAINS("hello world", "hello"); /* at the start */
     ASSERT_STR_CONTAINS("hello world", "world"); /* at the end */
     ASSERT_STR_CONTAINS("hello", "hello");       /* whole haystack */
-    ASSERT_STR_CONTAINS("hello", "");            /* empty needle is always found */
+    ASSERT_STR_CONTAINS("hello", ""); /* empty needle is always found */
 
     ASSERT_STR_NOT_CONTAINS("hello world", "zzz");
-    ASSERT_STR_NOT_CONTAINS("hello", "hello!");  /* needle longer than haystack */
-    ASSERT_STR_NOT_CONTAINS("hello", "HELLO");   /* the search is case-sensitive */
-    ASSERT_STR_NOT_CONTAINS("", "x");            /* empty haystack */
+    ASSERT_STR_NOT_CONTAINS(
+        "hello", "hello!"); /* needle longer than haystack */
+    ASSERT_STR_NOT_CONTAINS(
+        "hello", "HELLO");            /* the search is case-sensitive */
+    ASSERT_STR_NOT_CONTAINS("", "x"); /* empty haystack */
 }
 
 /* The generated-output case these macros exist for: a multi-line buffer

@@ -12,8 +12,8 @@
  * Configuration macros (define before including):
  *   CTT_IMPLEMENTATION   emit the implementation in this translation unit.
  *   CTT_NO_SHORT_NAMES   do NOT define the unprefixed aliases (TEST, ASSERT_EQ,
- *                        FAIL, ...); use the CTT_-prefixed names instead. Define
- *                        this if a bare macro collides with your project.
+ *                        FAIL, ...); use the CTT_-prefixed names instead.
+ * Define this if a bare macro collides with your project.
  *
  * Public API is namespaced: macros are CTT_*, C symbols are ctt_*. Short,
  * unprefixed macro aliases are provided by default for ergonomic tests.
@@ -34,24 +34,25 @@
    Only under __STRICT_ANSI__: in the default -std=gnu* modes glibc
    already exposes them, and naming a feature macro there would *narrow* what
    the rest of the translation unit sees. */
-#if defined(__STRICT_ANSI__) && !defined(_WIN32) &&                                       \
-    !defined(_POSIX_C_SOURCE) && !defined(_XOPEN_SOURCE) &&                               \
-    !defined(_GNU_SOURCE) && !defined(_DEFAULT_SOURCE) && !defined(_BSD_SOURCE)
+#if defined(__STRICT_ANSI__) && !defined(_WIN32) && !defined(_POSIX_C_SOURCE)  \
+    && !defined(_XOPEN_SOURCE) && !defined(_GNU_SOURCE)                        \
+    && !defined(_DEFAULT_SOURCE) && !defined(_BSD_SOURCE)
 /* Feature macros only take effect before the first libc header. __GLIBC__ is
    defined by <features.h>, so seeing it here means one was already included
    and we are too late to ask — say so plainly instead of failing later with a
    confusing "unknown type name 'sigjmp_buf'". */
 #if defined(__GLIBC__)
-#error "ctt.h must be included before any standard header when compiling with -std=c99 (or compile with -D_POSIX_C_SOURCE=200809L)"
+#error                                                                         \
+    "ctt.h must be included before any standard header when compiling with -std=c99 (or compile with -D_POSIX_C_SOURCE=200809L)"
 #endif
 #define _POSIX_C_SOURCE 200809L
 #endif
 
+#include <setjmp.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
-#include <setjmp.h>
 
 /* Crashes and failed assertions unwind back to the runner with a long jump.
    POSIX has sigsetjmp, which also restores the signal mask so a crash handler
@@ -79,16 +80,16 @@
 /* Spelled as UTF-8 byte escapes so every compiler emits the same bytes:
    MSVC would otherwise reinterpret a literal "✓" in the local code page
    unless the consumer builds with /utf-8. */
-#define CTT_CHECK "\xE2\x9C\x93"          /* ✓ */
-#define CTT_CROSS "\xE2\x9C\x97"          /* ✗ */
-#define CTT_ARROW "\xE2\x86\x92"          /* → */
-#define CTT_SYM_INFO "\xE2\x84\xB9"       /* ℹ */
-#define CTT_SYM_WARN "\xE2\x9A\xA0"       /* ⚠ */
-#define CTT_SYM_PASS "\xE2\x9C\x85"       /* ✅ */
-#define CTT_SYM_FAIL "\xE2\x9D\x8C"       /* ❌ */
+#define CTT_CHECK "\xE2\x9C\x93"         /* ✓ */
+#define CTT_CROSS "\xE2\x9C\x97"         /* ✗ */
+#define CTT_ARROW "\xE2\x86\x92"         /* → */
+#define CTT_SYM_INFO "\xE2\x84\xB9"      /* ℹ */
+#define CTT_SYM_WARN "\xE2\x9A\xA0"      /* ⚠ */
+#define CTT_SYM_PASS "\xE2\x9C\x85"      /* ✅ */
+#define CTT_SYM_FAIL "\xE2\x9D\x8C"      /* ❌ */
 #define CTT_SYM_PARTY "\xF0\x9F\x8E\x89" /* 🎉 */
 #define CTT_SYM_TEST "\xF0\x9F\xA7\xAA"  /* 🧪 */
-#define CTT_SYM_BULLET "\xE2\x80\xA2"     /* • */
+#define CTT_SYM_BULLET "\xE2\x80\xA2"    /* • */
 
 /* ------------------------------------------------------------------ */
 /* Registry + result tracking                                          */
@@ -117,7 +118,8 @@ typedef struct
     clock_t total_time;
     int verbose_mode;
     int stop_on_first_failure;
-    int jump_active; /* 1 while inside a test body: assertion failures longjmp out */
+    int jump_active; /* 1 while inside a test body: assertion failures longjmp
+                        out */
 } Ctt_Results;
 
 extern Ctt_Results ctt_results;
@@ -127,7 +129,8 @@ extern CTT_JMP_BUF ctt_jmp_buf;
 void ctt_register(const char *name, ctt_test_fn func);
 /* As ctt_register, but records the source location so tests run in source
    order even when the linker reorders the constructors (MSVC with /GL). */
-void ctt_register_at(const char *name, ctt_test_fn func, const char *file, int line);
+void ctt_register_at(
+    const char *name, ctt_test_fn func, const char *file, int line);
 
 /* ------------------------------------------------------------------ */
 /* Test declaration + auto-registration                                */
@@ -144,21 +147,21 @@ void ctt_register_at(const char *name, ctt_test_fn func, const char *file, int l
 #else
 #define CTT_SYM_PREFIX_ ""
 #endif
-#define CTT_CONSTRUCTOR_(f)                                            \
-    static void f(void);                                               \
-    __pragma(comment(linker, "/include:" CTT_SYM_PREFIX_ #f "_ptr"))  \
-    __declspec(allocate(".CRT$XCU")) void (*f##_ptr)(void) = f;        \
+#define CTT_CONSTRUCTOR_(f)                                                    \
+    static void f(void);                                                       \
+    __pragma(comment(linker, "/include:" CTT_SYM_PREFIX_ #f "_ptr"))           \
+        __declspec(allocate(".CRT$XCU")) void (*f##_ptr)(void) = f;            \
     static void f(void)
 #else
 #define CTT_CONSTRUCTOR_(f) __attribute__((constructor)) static void f(void)
 #endif
 
-#define CTT_TEST_NAMED(fn, label)                                      \
-    static void fn(void);                                              \
-    CTT_CONSTRUCTOR_(ctt_reg_##fn)                                     \
-    {                                                                  \
-        ctt_register_at(label, fn, __FILE__, __LINE__);                \
-    }                                                                  \
+#define CTT_TEST_NAMED(fn, label)                                              \
+    static void fn(void);                                                      \
+    CTT_CONSTRUCTOR_(ctt_reg_##fn)                                             \
+    {                                                                          \
+        ctt_register_at(label, fn, __FILE__, __LINE__);                        \
+    }                                                                          \
     static void fn(void)
 
 #define CTT_TEST(fn) CTT_TEST_NAMED(fn, #fn)
@@ -167,77 +170,89 @@ void ctt_register_at(const char *name, ctt_test_fn func, const char *file, int l
 /* Assertions                                                          */
 /* ------------------------------------------------------------------ */
 /* Internal helpers — not part of the public API. */
-#define CTT_ABORT_()                       \
-    do                                     \
-    {                                      \
-        ctt_record_failure();              \
-        if (ctt_results.jump_active)       \
-            CTT_LONGJMP(ctt_jmp_buf, 1);   \
+#define CTT_ABORT_()                                                           \
+    do                                                                         \
+    {                                                                          \
+        ctt_record_failure();                                                  \
+        if (ctt_results.jump_active)                                           \
+            CTT_LONGJMP(ctt_jmp_buf, 1);                                       \
     } while (0)
 
-#define CTT_FAIL_LOC_() \
-    printf("     at line %d in test '%s'\n", __LINE__, ctt_results.current_test_name)
+#define CTT_FAIL_LOC_()                                                        \
+    printf(                                                                    \
+        "     at line %d in test '%s'\n",                                      \
+        __LINE__,                                                              \
+        ctt_results.current_test_name)
 
 /* Unconditional failure with a custom message. */
-#define CTT_FAIL(msg)                                                                     \
-    do                                                                                    \
-    {                                                                                     \
-        printf("  " CTT_COL_RED CTT_CROSS " FAIL: %s" CTT_COL_RESET "\n", (msg));         \
-        CTT_FAIL_LOC_();                                                                  \
-        CTT_ABORT_();                                                                     \
+#define CTT_FAIL(msg)                                                          \
+    do                                                                         \
+    {                                                                          \
+        printf(                                                                \
+            "  " CTT_COL_RED CTT_CROSS " FAIL: %s" CTT_COL_RESET "\n", (msg)); \
+        CTT_FAIL_LOC_();                                                       \
+        CTT_ABORT_();                                                          \
     } while (0)
 
 /* Unconditional failure with a printf-style message.  Use when the useful
    diagnostic is computed, not a fixed string. */
-#define CTT_FAILF(...)                                                                    \
-    do                                                                                    \
-    {                                                                                     \
-        printf("  " CTT_COL_RED CTT_CROSS " FAIL: ");                                     \
-        printf(__VA_ARGS__);                                                              \
-        printf(CTT_COL_RESET "\n");                                                       \
-        CTT_FAIL_LOC_();                                                                  \
-        CTT_ABORT_();                                                                     \
+#define CTT_FAILF(...)                                                         \
+    do                                                                         \
+    {                                                                          \
+        printf("  " CTT_COL_RED CTT_CROSS " FAIL: ");                          \
+        printf(__VA_ARGS__);                                                   \
+        printf(CTT_COL_RESET "\n");                                            \
+        CTT_FAIL_LOC_();                                                       \
+        CTT_ABORT_();                                                          \
     } while (0)
 
-#define CTT_ASSERT(condition)                                                             \
-    do                                                                                    \
-    {                                                                                     \
-        if (!(condition))                                                                 \
-        {                                                                                 \
-            printf("  " CTT_COL_RED CTT_CROSS " FAIL: %s" CTT_COL_RESET "\n", #condition); \
-            CTT_FAIL_LOC_();                                                              \
-            CTT_ABORT_();                                                                 \
-        }                                                                                 \
+#define CTT_ASSERT(condition)                                                  \
+    do                                                                         \
+    {                                                                          \
+        if (!(condition))                                                      \
+        {                                                                      \
+            printf(                                                            \
+                "  " CTT_COL_RED CTT_CROSS " FAIL: %s" CTT_COL_RESET "\n",     \
+                #condition);                                                   \
+            CTT_FAIL_LOC_();                                                   \
+            CTT_ABORT_();                                                      \
+        }                                                                      \
     } while (0)
 
-#define CTT_ASSERT_EQ(expected, actual)                                                        \
-    do                                                                                          \
-    {                                                                                           \
-        long long _e = (long long)(expected);                                                   \
-        long long _a = (long long)(actual);                                                     \
-        if (_e != _a)                                                                           \
-        {                                                                                       \
-            printf("  " CTT_COL_RED CTT_CROSS " FAIL: Expected %lld, got %lld" CTT_COL_RESET     \
-                   "\n", _e, _a);                                                               \
-            CTT_FAIL_LOC_();                                                                    \
-            CTT_ABORT_();                                                                       \
-        }                                                                                       \
+#define CTT_ASSERT_EQ(expected, actual)                                        \
+    do                                                                         \
+    {                                                                          \
+        long long _e = (long long)(expected);                                  \
+        long long _a = (long long)(actual);                                    \
+        if (_e != _a)                                                          \
+        {                                                                      \
+            printf(                                                            \
+                "  " CTT_COL_RED CTT_CROSS                                     \
+                " FAIL: Expected %lld, got %lld" CTT_COL_RESET "\n",           \
+                _e,                                                            \
+                _a);                                                           \
+            CTT_FAIL_LOC_();                                                   \
+            CTT_ABORT_();                                                      \
+        }                                                                      \
     } while (0)
 
 /* Relational assertions. Operands compared as long long (same domain as
    CTT_ASSERT_EQ) — good for ints, sizes, and pointer differences. */
-#define CTT_CMP_(a, op, b)                                                                      \
-    do                                                                                          \
-    {                                                                                           \
-        long long _a = (long long)(a);                                                          \
-        long long _b = (long long)(b);                                                          \
-        if (!(_a op _b))                                                                        \
-        {                                                                                       \
-            printf("  " CTT_COL_RED CTT_CROSS " FAIL: %lld " #op " %lld is false" CTT_COL_RESET  \
-                   "\n", _a, _b);                                                               \
-            CTT_FAIL_LOC_();                                                                    \
-            CTT_ABORT_();                                                                       \
-        }                                                                                       \
+#define CTT_CMP_(a, op, b)                                                     \
+    do                                                                         \
+    {                                                                          \
+        long long _a = (long long)(a);                                         \
+        long long _b = (long long)(b);                                         \
+        if (!(_a op _b))                                                       \
+        {                                                                      \
+            printf(                                                            \
+                "  " CTT_COL_RED CTT_CROSS " FAIL: %lld " #op                  \
+                " %lld is false" CTT_COL_RESET "\n",                           \
+                _a,                                                            \
+                _b);                                                           \
+            CTT_FAIL_LOC_();                                                   \
+            CTT_ABORT_();                                                      \
+        }                                                                      \
     } while (0)
 
 #define CTT_ASSERT_NE(expected, actual) CTT_CMP_((expected), !=, (actual))
@@ -246,172 +261,207 @@ void ctt_register_at(const char *name, ctt_test_fn func, const char *file, int l
 #define CTT_ASSERT_GT(a, b) CTT_CMP_((a), >, (b))
 #define CTT_ASSERT_GE(a, b) CTT_CMP_((a), >=, (b))
 
-#define CTT_ASSERT_PTR_EQ(expected, actual)                                                     \
-    do                                                                                          \
-    {                                                                                           \
-        if ((void *)(expected) != (void *)(actual))                                             \
-        {                                                                                       \
-            printf("  " CTT_COL_RED CTT_CROSS " FAIL: Expected %p, got %p" CTT_COL_RESET         \
-                   "\n", (void *)(expected), (void *)(actual));                                 \
-            CTT_FAIL_LOC_();                                                                    \
-            CTT_ABORT_();                                                                       \
-        }                                                                                       \
+#define CTT_ASSERT_PTR_EQ(expected, actual)                                    \
+    do                                                                         \
+    {                                                                          \
+        if ((void *)(expected) != (void *)(actual))                            \
+        {                                                                      \
+            printf(                                                            \
+                "  " CTT_COL_RED CTT_CROSS                                     \
+                " FAIL: Expected %p, got %p" CTT_COL_RESET "\n",               \
+                (void *)(expected),                                            \
+                (void *)(actual));                                             \
+            CTT_FAIL_LOC_();                                                   \
+            CTT_ABORT_();                                                      \
+        }                                                                      \
     } while (0)
 
-#define CTT_ASSERT_PTR_NE(unexpected, actual)                                                   \
-    do                                                                                          \
-    {                                                                                           \
-        if ((void *)(unexpected) == (void *)(actual))                                           \
-        {                                                                                       \
-            printf("  " CTT_COL_RED CTT_CROSS " FAIL: pointers equal (%p), expected differ"      \
-                   CTT_COL_RESET "\n", (void *)(actual));                                       \
-            CTT_FAIL_LOC_();                                                                    \
-            CTT_ABORT_();                                                                       \
-        }                                                                                       \
+#define CTT_ASSERT_PTR_NE(unexpected, actual)                                  \
+    do                                                                         \
+    {                                                                          \
+        if ((void *)(unexpected) == (void *)(actual))                          \
+        {                                                                      \
+            printf(                                                            \
+                "  " CTT_COL_RED CTT_CROSS                                     \
+                " FAIL: pointers equal (%p), expected differ" CTT_COL_RESET    \
+                "\n",                                                          \
+                (void *)(actual));                                             \
+            CTT_FAIL_LOC_();                                                   \
+            CTT_ABORT_();                                                      \
+        }                                                                      \
     } while (0)
 
-#define CTT_ASSERT_STR_EQ(expected, actual)                                                     \
-    do                                                                                          \
-    {                                                                                           \
-        if (strcmp((expected), (actual)) != 0)                                                  \
-        {                                                                                       \
-            printf("  " CTT_COL_RED CTT_CROSS " FAIL: Expected '%s', got '%s'" CTT_COL_RESET     \
-                   "\n", (expected), (actual));                                                 \
-            CTT_FAIL_LOC_();                                                                    \
-            CTT_ABORT_();                                                                       \
-        }                                                                                       \
+#define CTT_ASSERT_STR_EQ(expected, actual)                                    \
+    do                                                                         \
+    {                                                                          \
+        if (strcmp((expected), (actual)) != 0)                                 \
+        {                                                                      \
+            printf(                                                            \
+                "  " CTT_COL_RED CTT_CROSS                                     \
+                " FAIL: Expected '%s', got '%s'" CTT_COL_RESET "\n",           \
+                (expected),                                                    \
+                (actual));                                                     \
+            CTT_FAIL_LOC_();                                                   \
+            CTT_ABORT_();                                                      \
+        }                                                                      \
     } while (0)
 
-#define CTT_ASSERT_STRN_EQ(expected, actual, size)                                              \
-    do                                                                                          \
-    {                                                                                           \
-        if (strncmp((expected), (actual), size) != 0)                                           \
-        {                                                                                       \
-            printf("  " CTT_COL_RED CTT_CROSS " FAIL: Expected '%s', got '%s'" CTT_COL_RESET     \
-                   "\n", (expected), (actual));                                                 \
-            CTT_FAIL_LOC_();                                                                    \
-            CTT_ABORT_();                                                                       \
-        }                                                                                       \
+#define CTT_ASSERT_STRN_EQ(expected, actual, size)                             \
+    do                                                                         \
+    {                                                                          \
+        if (strncmp((expected), (actual), size) != 0)                          \
+        {                                                                      \
+            printf(                                                            \
+                "  " CTT_COL_RED CTT_CROSS                                     \
+                " FAIL: Expected '%s', got '%s'" CTT_COL_RESET "\n",           \
+                (expected),                                                    \
+                (actual));                                                     \
+            CTT_FAIL_LOC_();                                                   \
+            CTT_ABORT_();                                                      \
+        }                                                                      \
     } while (0)
 
 /* Substring search.  On failure both the needle and the full haystack are
    printed, which is what you want when the haystack is generated output. */
-#define CTT_ASSERT_STR_CONTAINS(haystack, needle)                                               \
-    do                                                                                          \
-    {                                                                                           \
-        const char *ctt_h_ = (haystack);                                                        \
-        const char *ctt_n_ = (needle);                                                          \
-        if (ctt_h_ == NULL || strstr(ctt_h_, ctt_n_) == NULL)                                   \
-        {                                                                                       \
-            printf("  " CTT_COL_RED CTT_CROSS " FAIL: Expected to find '%s' in:" CTT_COL_RESET   \
-                   "\n%s\n", ctt_n_, ctt_h_ ? ctt_h_ : "(null)");                               \
-            CTT_FAIL_LOC_();                                                                    \
-            CTT_ABORT_();                                                                       \
-        }                                                                                       \
+#define CTT_ASSERT_STR_CONTAINS(haystack, needle)                              \
+    do                                                                         \
+    {                                                                          \
+        const char *ctt_h_ = (haystack);                                       \
+        const char *ctt_n_ = (needle);                                         \
+        if (ctt_h_ == NULL || strstr(ctt_h_, ctt_n_) == NULL)                  \
+        {                                                                      \
+            printf(                                                            \
+                "  " CTT_COL_RED CTT_CROSS                                     \
+                " FAIL: Expected to find '%s' in:" CTT_COL_RESET "\n%s\n",     \
+                ctt_n_,                                                        \
+                ctt_h_ ? ctt_h_ : "(null)");                                   \
+            CTT_FAIL_LOC_();                                                   \
+            CTT_ABORT_();                                                      \
+        }                                                                      \
     } while (0)
 
-#define CTT_ASSERT_STR_NOT_CONTAINS(haystack, needle)                                           \
-    do                                                                                          \
-    {                                                                                           \
-        const char *ctt_h_ = (haystack);                                                        \
-        const char *ctt_n_ = (needle);                                                          \
-        if (ctt_h_ != NULL && strstr(ctt_h_, ctt_n_) != NULL)                                   \
-        {                                                                                       \
-            printf("  " CTT_COL_RED CTT_CROSS " FAIL: Expected NOT to find '%s' in:"             \
-                   CTT_COL_RESET "\n%s\n", ctt_n_, ctt_h_);                                     \
-            CTT_FAIL_LOC_();                                                                    \
-            CTT_ABORT_();                                                                       \
-        }                                                                                       \
+#define CTT_ASSERT_STR_NOT_CONTAINS(haystack, needle)                          \
+    do                                                                         \
+    {                                                                          \
+        const char *ctt_h_ = (haystack);                                       \
+        const char *ctt_n_ = (needle);                                         \
+        if (ctt_h_ != NULL && strstr(ctt_h_, ctt_n_) != NULL)                  \
+        {                                                                      \
+            printf(                                                            \
+                "  " CTT_COL_RED CTT_CROSS                                     \
+                " FAIL: Expected NOT to find '%s' in:" CTT_COL_RESET "\n%s\n", \
+                ctt_n_,                                                        \
+                ctt_h_);                                                       \
+            CTT_FAIL_LOC_();                                                   \
+            CTT_ABORT_();                                                      \
+        }                                                                      \
     } while (0)
 
-#define CTT_ASSERT_NOT_NULL(ptr)                                                                \
-    do                                                                                          \
-    {                                                                                           \
-        if ((ptr) == NULL)                                                                      \
-        {                                                                                       \
-            printf("  " CTT_COL_RED CTT_CROSS " FAIL: Expected non-NULL pointer, got NULL"       \
-                   CTT_COL_RESET "\n");                                                         \
-            CTT_FAIL_LOC_();                                                                    \
-            CTT_ABORT_();                                                                       \
-        }                                                                                       \
+#define CTT_ASSERT_NOT_NULL(ptr)                                               \
+    do                                                                         \
+    {                                                                          \
+        if ((ptr) == NULL)                                                     \
+        {                                                                      \
+            printf(                                                            \
+                "  " CTT_COL_RED CTT_CROSS                                     \
+                " FAIL: Expected non-NULL pointer, got NULL" CTT_COL_RESET     \
+                "\n");                                                         \
+            CTT_FAIL_LOC_();                                                   \
+            CTT_ABORT_();                                                      \
+        }                                                                      \
     } while (0)
 
-#define CTT_ASSERT_NULL(ptr)                                                                    \
-    do                                                                                          \
-    {                                                                                           \
-        if ((ptr) != NULL)                                                                      \
-        {                                                                                       \
-            printf("  " CTT_COL_RED CTT_CROSS " FAIL: Expected NULL pointer, got %p"             \
-                   CTT_COL_RESET "\n", (void *)(ptr));                                          \
-            CTT_FAIL_LOC_();                                                                    \
-            CTT_ABORT_();                                                                       \
-        }                                                                                       \
+#define CTT_ASSERT_NULL(ptr)                                                   \
+    do                                                                         \
+    {                                                                          \
+        if ((ptr) != NULL)                                                     \
+        {                                                                      \
+            printf(                                                            \
+                "  " CTT_COL_RED CTT_CROSS                                     \
+                " FAIL: Expected NULL pointer, got %p" CTT_COL_RESET "\n",     \
+                (void *)(ptr));                                                \
+            CTT_FAIL_LOC_();                                                   \
+            CTT_ABORT_();                                                      \
+        }                                                                      \
     } while (0)
 
-#define CTT_ASSERT_TRUE(condition)                                                              \
-    do                                                                                          \
-    {                                                                                           \
-        if (!(condition))                                                                       \
-        {                                                                                       \
-            printf("  " CTT_COL_RED CTT_CROSS " FAIL: Expected true, got false: %s"              \
-                   CTT_COL_RESET "\n", #condition);                                             \
-            CTT_FAIL_LOC_();                                                                    \
-            CTT_ABORT_();                                                                       \
-        }                                                                                       \
+#define CTT_ASSERT_TRUE(condition)                                             \
+    do                                                                         \
+    {                                                                          \
+        if (!(condition))                                                      \
+        {                                                                      \
+            printf(                                                            \
+                "  " CTT_COL_RED CTT_CROSS                                     \
+                " FAIL: Expected true, got false: %s" CTT_COL_RESET "\n",      \
+                #condition);                                                   \
+            CTT_FAIL_LOC_();                                                   \
+            CTT_ABORT_();                                                      \
+        }                                                                      \
     } while (0)
 
-#define CTT_ASSERT_FALSE(condition)                                                             \
-    do                                                                                          \
-    {                                                                                           \
-        if (condition)                                                                          \
-        {                                                                                       \
-            printf("  " CTT_COL_RED CTT_CROSS " FAIL: Expected false, got true: %s"              \
-                   CTT_COL_RESET "\n", #condition);                                             \
-            CTT_FAIL_LOC_();                                                                    \
-            CTT_ABORT_();                                                                       \
-        }                                                                                       \
+#define CTT_ASSERT_FALSE(condition)                                            \
+    do                                                                         \
+    {                                                                          \
+        if (condition)                                                         \
+        {                                                                      \
+            printf(                                                            \
+                "  " CTT_COL_RED CTT_CROSS                                     \
+                " FAIL: Expected false, got true: %s" CTT_COL_RESET "\n",      \
+                #condition);                                                   \
+            CTT_FAIL_LOC_();                                                   \
+            CTT_ABORT_();                                                      \
+        }                                                                      \
     } while (0)
 
-#define CTT_ASSERT_ARRAY_EQ(expected, actual, size)                                             \
-    do                                                                                          \
-    {                                                                                           \
-        for (int _i = 0; _i < (size); _i++)                                                     \
-        {                                                                                       \
-            if ((expected)[_i] != (actual)[_i])                                                 \
-            {                                                                                   \
-                printf("  " CTT_COL_RED CTT_CROSS                                               \
-                       " FAIL: Array differs at index %d: expected %d, got %d" CTT_COL_RESET     \
-                       "\n", _i, (int)(expected)[_i], (int)(actual)[_i]);                       \
-                CTT_FAIL_LOC_();                                                                \
-                CTT_ABORT_();                                                                   \
-            }                                                                                   \
-        }                                                                                       \
+#define CTT_ASSERT_ARRAY_EQ(expected, actual, size)                            \
+    do                                                                         \
+    {                                                                          \
+        for (int _i = 0; _i < (size); _i++)                                    \
+        {                                                                      \
+            if ((expected)[_i] != (actual)[_i])                                \
+            {                                                                  \
+                printf(                                                        \
+                    "  " CTT_COL_RED CTT_CROSS                                 \
+                    " FAIL: Array differs at index %d: expected %d, got "      \
+                    "%d" CTT_COL_RESET "\n",                                   \
+                    _i,                                                        \
+                    (int)(expected)[_i],                                       \
+                    (int)(actual)[_i]);                                        \
+                CTT_FAIL_LOC_();                                               \
+                CTT_ABORT_();                                                  \
+            }                                                                  \
+        }                                                                      \
     } while (0)
 
-#define CTT_ASSERT_FLOAT_EQ(expected, actual, tolerance)                                        \
-    do                                                                                          \
-    {                                                                                           \
-        double _diff = ((expected) - (actual));                                                 \
-        if (_diff < 0)                                                                           \
-            _diff = -_diff;                                                                      \
-        if (_diff > (tolerance))                                                                 \
-        {                                                                                       \
-            printf("  " CTT_COL_RED CTT_CROSS " FAIL: Expected %f, got %f (diff: %f > %f)"        \
-                   CTT_COL_RESET "\n", (double)(expected), (double)(actual), _diff,             \
-                   (double)(tolerance));                                                        \
-            CTT_FAIL_LOC_();                                                                    \
-            CTT_ABORT_();                                                                       \
-        }                                                                                       \
+#define CTT_ASSERT_FLOAT_EQ(expected, actual, tolerance)                       \
+    do                                                                         \
+    {                                                                          \
+        double _diff = ((expected) - (actual));                                \
+        if (_diff < 0)                                                         \
+            _diff = -_diff;                                                    \
+        if (_diff > (tolerance))                                               \
+        {                                                                      \
+            printf(                                                            \
+                "  " CTT_COL_RED CTT_CROSS                                     \
+                " FAIL: Expected %f, got %f (diff: %f > %f)" CTT_COL_RESET     \
+                "\n",                                                          \
+                (double)(expected),                                            \
+                (double)(actual),                                              \
+                _diff,                                                         \
+                (double)(tolerance));                                          \
+            CTT_FAIL_LOC_();                                                   \
+            CTT_ABORT_();                                                      \
+        }                                                                      \
     } while (0)
 
-#define CTT_INFO(msg, ...)                                             \
-    do                                                                 \
-    {                                                                  \
-        if (ctt_results.verbose_mode)                                  \
-            printf("  " CTT_SYM_INFO "  INFO: " msg "\n", ##__VA_ARGS__); \
+#define CTT_INFO(msg, ...)                                                     \
+    do                                                                         \
+    {                                                                          \
+        if (ctt_results.verbose_mode)                                          \
+            printf("  " CTT_SYM_INFO "  INFO: " msg "\n", ##__VA_ARGS__);      \
     } while (0)
 
-#define CTT_WARN(msg, ...) \
+#define CTT_WARN(msg, ...)                                                     \
     printf("  " CTT_SYM_WARN "  WARN: " msg "\n", ##__VA_ARGS__)
 
 /* ------------------------------------------------------------------ */
@@ -505,7 +555,9 @@ void ctt_setup_console(void)
     SetConsoleMode(hOut, dwMode);
 }
 #else
-void ctt_setup_console(void) {}
+void ctt_setup_console(void)
+{
+}
 #endif
 
 Ctt_Results ctt_results;
@@ -534,7 +586,8 @@ void ctt_register(const char *name, ctt_test_fn func)
     ctt_register_at(name, func, NULL, 0);
 }
 
-void ctt_register_at(const char *name, ctt_test_fn func, const char *file, int line)
+void ctt_register_at(
+    const char *name, ctt_test_fn func, const char *file, int line)
 {
     if (ctt_registered_count >= CTT_MAX_TESTS)
     {
@@ -570,14 +623,17 @@ static void ctt_sort_registry(void)
     /* Rank files before moving anything, by their first registration. */
     static int rank[CTT_MAX_TESTS];
     for (int i = 0; i < ctt_registered_count; i++)
-        rank[i] = ctt_registry[i].file ? ctt_file_rank(ctt_registry[i].file) : i;
+        rank[i] =
+            ctt_registry[i].file ? ctt_file_rank(ctt_registry[i].file) : i;
 
     for (int i = 1; i < ctt_registered_count; i++)
     {
         Ctt_TestCase tc = ctt_registry[i];
         int r = rank[i];
         int j = i - 1;
-        while (j >= 0 && (rank[j] > r || (rank[j] == r && ctt_registry[j].line > tc.line)))
+        while (j >= 0
+               && (rank[j] > r
+                   || (rank[j] == r && ctt_registry[j].line > tc.line)))
         {
             ctt_registry[j + 1] = ctt_registry[j];
             rank[j + 1] = rank[j];
@@ -593,17 +649,27 @@ void ctt_init(void)
     memset(&ctt_results, 0, sizeof(ctt_results));
 }
 
-void ctt_set_verbose(int verbose) { ctt_results.verbose_mode = verbose; }
-void ctt_set_stop_on_failure(int stop) { ctt_results.stop_on_first_failure = stop; }
-void ctt_set_filter(const char *substr) { ctt_name_filter = substr; }
+void ctt_set_verbose(int verbose)
+{
+    ctt_results.verbose_mode = verbose;
+}
+void ctt_set_stop_on_failure(int stop)
+{
+    ctt_results.stop_on_first_failure = stop;
+}
+void ctt_set_filter(const char *substr)
+{
+    ctt_name_filter = substr;
+}
 
 void ctt_record_failure(void)
 {
     if (ctt_results.failed_test_count < CTT_MAX_TESTS)
     {
-        ctt_copy_str(ctt_results.failed_test_names[ctt_results.failed_test_count],
-                     sizeof(ctt_results.failed_test_names[0]),
-                     ctt_results.current_test_name);
+        ctt_copy_str(
+            ctt_results.failed_test_names[ctt_results.failed_test_count],
+            sizeof(ctt_results.failed_test_names[0]),
+            ctt_results.current_test_name);
         ctt_results.failed_test_count++;
     }
     ctt_results.failed_tests++;
@@ -614,18 +680,29 @@ void ctt_record_failure(void)
    MSVC has no weak symbols. There, /alternatename makes the linker fall back
    to the defaults only when the suite leaves a hook undefined. */
 #ifdef _MSC_VER
-void ctt_default_before_each(void) {}
-void ctt_default_after_each(void) {}
+void ctt_default_before_each(void)
+{
+}
+void ctt_default_after_each(void)
+{
+}
 #ifdef _M_IX86
-#pragma comment(linker, "/alternatename:_ctt_before_each=_ctt_default_before_each")
-#pragma comment(linker, "/alternatename:_ctt_after_each=_ctt_default_after_each")
+#pragma comment(                                                               \
+    linker, "/alternatename:_ctt_before_each=_ctt_default_before_each")
+#pragma comment(                                                               \
+    linker, "/alternatename:_ctt_after_each=_ctt_default_after_each")
 #else
-#pragma comment(linker, "/alternatename:ctt_before_each=ctt_default_before_each")
+#pragma comment(                                                               \
+    linker, "/alternatename:ctt_before_each=ctt_default_before_each")
 #pragma comment(linker, "/alternatename:ctt_after_each=ctt_default_after_each")
 #endif
 #else
-__attribute__((weak)) void ctt_before_each(void) {}
-__attribute__((weak)) void ctt_after_each(void) {}
+__attribute__((weak)) void ctt_before_each(void)
+{
+}
+__attribute__((weak)) void ctt_after_each(void)
+{
+}
 #endif
 
 static void ctt_crash_handler(int sig)
@@ -745,21 +822,30 @@ static const char *ctt_signal_name(int sig)
 {
     switch (sig)
     {
-    case SIGSEGV: return "SIGSEGV (segmentation fault)";
+    case SIGSEGV:
+        return "SIGSEGV (segmentation fault)";
 #ifdef SIGBUS
-    case SIGBUS:  return "SIGBUS (bus error)";
+    case SIGBUS:
+        return "SIGBUS (bus error)";
 #endif
-    case SIGILL:  return "SIGILL (illegal instruction)";
-    case SIGABRT: return "SIGABRT (abort)";
-    case SIGFPE:  return "SIGFPE (arithmetic error)";
-    default:      return "signal";
+    case SIGILL:
+        return "SIGILL (illegal instruction)";
+    case SIGABRT:
+        return "SIGABRT (abort)";
+    case SIGFPE:
+        return "SIGFPE (arithmetic error)";
+    default:
+        return "signal";
     }
 }
 
 void ctt_run_one(const char *name, ctt_test_fn func)
 {
     ctt_results.total_tests++;
-    ctt_copy_str(ctt_results.current_test_name, sizeof(ctt_results.current_test_name), name);
+    ctt_copy_str(
+        ctt_results.current_test_name,
+        sizeof(ctt_results.current_test_name),
+        name);
 
     printf("Running: %s", name);
     fflush(stdout);
@@ -786,8 +872,9 @@ void ctt_run_one(const char *name, ctt_test_fn func)
 
     if (ctt_crash_signal != 0)
     {
-        printf("  " CTT_COL_RED CTT_CROSS " CRASH: caught %s" CTT_COL_RESET "\n",
-               ctt_signal_name(ctt_crash_signal));
+        printf(
+            "  " CTT_COL_RED CTT_CROSS " CRASH: caught %s" CTT_COL_RESET "\n",
+            ctt_signal_name(ctt_crash_signal));
         if (ctt_results.failed_tests == failed_before)
             ctt_record_failure();
         printf(" " CTT_COL_RED CTT_CROSS " CRASHED\n" CTT_COL_RESET);
@@ -795,7 +882,8 @@ void ctt_run_one(const char *name, ctt_test_fn func)
     else if (ctt_results.failed_tests == failed_before)
     {
         ctt_results.passed_tests++;
-        double t = ((double)(end - ctt_results.test_start_time)) / CLOCKS_PER_SEC;
+        double t =
+            ((double)(end - ctt_results.test_start_time)) / CLOCKS_PER_SEC;
         if (t > 0.001)
             printf(" " CTT_SYM_PASS " PASS (%.3fs)\n", t);
         else
@@ -814,7 +902,8 @@ int ctt_run_all(void)
 
     for (int i = 0; i < ctt_registered_count; i++)
     {
-        if (ctt_name_filter && strstr(ctt_registry[i].name, ctt_name_filter) == NULL)
+        if (ctt_name_filter
+            && strstr(ctt_registry[i].name, ctt_name_filter) == NULL)
             continue;
 
         ctt_run_one(ctt_registry[i].name, ctt_registry[i].func);
@@ -831,27 +920,38 @@ void ctt_print_summary(void)
 {
     printf("\n" CTT_COL_BLUE "=== Test Summary ===" CTT_COL_RESET "\n");
     printf("Total tests: %d\n", ctt_results.total_tests);
-    printf("Passed: " CTT_COL_GREEN "%d " CTT_CHECK CTT_COL_RESET "\n", ctt_results.passed_tests);
-    printf("Failed: " CTT_COL_RED "%d " CTT_CROSS CTT_COL_RESET "\n", ctt_results.failed_tests);
+    printf(
+        "Passed: " CTT_COL_GREEN "%d " CTT_CHECK CTT_COL_RESET "\n",
+        ctt_results.passed_tests);
+    printf(
+        "Failed: " CTT_COL_RED "%d " CTT_CROSS CTT_COL_RESET "\n",
+        ctt_results.failed_tests);
 
     if (ctt_results.total_time > 0)
     {
         double total = ((double)ctt_results.total_time) / CLOCKS_PER_SEC;
-        printf("Total time: " CTT_COL_CYAN "%.3f seconds" CTT_COL_RESET "\n", total);
+        printf(
+            "Total time: " CTT_COL_CYAN "%.3f seconds" CTT_COL_RESET "\n",
+            total);
         if (ctt_results.total_tests > 0)
-            printf("Avg per test: " CTT_COL_CYAN "%.3f seconds" CTT_COL_RESET "\n",
-                   total / ctt_results.total_tests);
+            printf(
+                "Avg per test: " CTT_COL_CYAN "%.3f seconds" CTT_COL_RESET "\n",
+                total / ctt_results.total_tests);
     }
 
     if (ctt_results.failed_tests > 0)
     {
         printf("\n" CTT_COL_RED CTT_CROSS " Failed tests:" CTT_COL_RESET "\n");
         for (int i = 0; i < ctt_results.failed_test_count; i++)
-            printf("  " CTT_COL_RED CTT_SYM_BULLET " %s" CTT_COL_RESET "\n", ctt_results.failed_test_names[i]);
+            printf(
+                "  " CTT_COL_RED CTT_SYM_BULLET " %s" CTT_COL_RESET "\n",
+                ctt_results.failed_test_names[i]);
     }
     else
     {
-        printf("\n" CTT_COL_GREEN CTT_SYM_PARTY " All tests passed!" CTT_COL_RESET "\n");
+        printf(
+            "\n" CTT_COL_GREEN CTT_SYM_PARTY " All tests passed!" CTT_COL_RESET
+            "\n");
     }
 }
 
