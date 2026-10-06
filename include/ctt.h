@@ -18,8 +18,10 @@
  * Public API is namespaced: macros are CTT_*, C symbols are ctt_*. Short,
  * unprefixed macro aliases are provided by default for ergonomic tests.
  *
- * Requires GCC or Clang (uses __attribute__((constructor)) for test
- * auto-registration and weak symbols for lifecycle hooks).
+ * Portable to GCC and Clang on POSIX systems, and to MSVC, clang-cl and
+ * MinGW on Windows. Test auto-registration uses __attribute__((constructor))
+ * (a .CRT$XCU initializer on MSVC); the optional lifecycle hooks are weak
+ * symbols (/alternatename on MSVC).
  *
  * License: MIT. See LICENSE.
  */
@@ -51,10 +53,18 @@
 #include <time.h>
 #include <setjmp.h>
 
+/* Crashes and failed assertions unwind back to the runner with a long jump.
+   POSIX has sigsetjmp, which also restores the signal mask so a crash handler
+   can fire again for the next test. Windows has no signal mask, so plain
+   setjmp/longjmp do the same job there. */
 #ifdef _WIN32
-#define CTT_STRNCPY strncpy_s
+#define CTT_JMP_BUF jmp_buf
+#define CTT_SETJMP(env) setjmp(env)
+#define CTT_LONGJMP(env, val) longjmp(env, val)
 #else
-#define CTT_STRNCPY strncpy
+#define CTT_JMP_BUF sigjmp_buf
+#define CTT_SETJMP(env) sigsetjmp(env, 1)
+#define CTT_LONGJMP(env, val) siglongjmp(env, val)
 #endif
 
 /* ANSI colors + symbols (prefixed to avoid clashing with consumer macros). */
@@ -66,11 +76,19 @@
 #define CTT_COL_CYAN "\x1b[36m"
 #define CTT_COL_RESET "\x1b[0m"
 
-#define CTT_CHECK "✓"
-#define CTT_CROSS "✗"
-#define CTT_ARROW "→"
-#define CTT_SYM_INFO "ℹ"
-#define CTT_SYM_WARN "⚠"
+/* Spelled as UTF-8 byte escapes so every compiler emits the same bytes:
+   MSVC would otherwise reinterpret a literal "✓" in the local code page
+   unless the consumer builds with /utf-8. */
+#define CTT_CHECK "\xE2\x9C\x93"          /* ✓ */
+#define CTT_CROSS "\xE2\x9C\x97"          /* ✗ */
+#define CTT_ARROW "\xE2\x86\x92"          /* → */
+#define CTT_SYM_INFO "\xE2\x84\xB9"       /* ℹ */
+#define CTT_SYM_WARN "\xE2\x9A\xA0"       /* ⚠ */
+#define CTT_SYM_PASS "\xE2\x9C\x85"       /* ✅ */
+#define CTT_SYM_FAIL "\xE2\x9D\x8C"       /* ❌ */
+#define CTT_SYM_PARTY "\xF0\x9F\x8E\x89" /* 🎉 */
+#define CTT_SYM_TEST "\xF0\x9F\xA7\xAA"  /* 🧪 */
+#define CTT_SYM_BULLET "\xE2\x80\xA2"     /* • */
 
 /* ------------------------------------------------------------------ */
 /* Registry + result tracking                                          */
@@ -101,7 +119,7 @@ typedef struct
 } Ctt_Results;
 
 extern Ctt_Results ctt_results;
-extern sigjmp_buf ctt_jmp_buf;
+extern CTT_JMP_BUF ctt_jmp_buf;
 
 /* Called by the CTT_TEST macro's constructor before main(). */
 void ctt_register(const char *name, ctt_test_fn func);
@@ -109,9 +127,30 @@ void ctt_register(const char *name, ctt_test_fn func);
 /* ------------------------------------------------------------------ */
 /* Test declaration + auto-registration                                */
 /* ------------------------------------------------------------------ */
+/* CTT_CONSTRUCTOR_(f) opens a function f that runs before main(). MSVC has no
+   constructor attribute, so f is put in the CRT's C initializer table
+   (.CRT$XCU). The pointer must have external linkage, and the /include
+   pragma stops the linker from discarding it. As a result, two tests with
+   the same function name in different .c files collide under MSVC. */
+#ifdef _MSC_VER
+#pragma section(".CRT$XCU", read)
+#ifdef _M_IX86
+#define CTT_SYM_PREFIX_ "_" /* 32-bit x86 decorates C symbols with '_' */
+#else
+#define CTT_SYM_PREFIX_ ""
+#endif
+#define CTT_CONSTRUCTOR_(f)                                            \
+    static void f(void);                                               \
+    __pragma(comment(linker, "/include:" CTT_SYM_PREFIX_ #f "_ptr"))  \
+    __declspec(allocate(".CRT$XCU")) void (*f##_ptr)(void) = f;        \
+    static void f(void)
+#else
+#define CTT_CONSTRUCTOR_(f) __attribute__((constructor)) static void f(void)
+#endif
+
 #define CTT_TEST_NAMED(fn, label)                                      \
     static void fn(void);                                              \
-    __attribute__((constructor)) static void _ctt_reg_##fn(void)       \
+    CTT_CONSTRUCTOR_(ctt_reg_##fn)                                     \
     {                                                                  \
         ctt_register(label, fn);                                       \
     }                                                                  \
@@ -128,7 +167,7 @@ void ctt_register(const char *name, ctt_test_fn func);
     {                                      \
         ctt_record_failure();              \
         if (ctt_results.jump_active)       \
-            siglongjmp(ctt_jmp_buf, 1);    \
+            CTT_LONGJMP(ctt_jmp_buf, 1);   \
     } while (0)
 
 #define CTT_FAIL_LOC_() \
@@ -447,6 +486,10 @@ int ctt_main(int argc, char *argv[], const char *suite_title);
 
 #ifdef _WIN32
 #include <windows.h>
+/* Missing from older MinGW headers. */
+#ifndef ENABLE_VIRTUAL_TERMINAL_PROCESSING
+#define ENABLE_VIRTUAL_TERMINAL_PROCESSING 0x0004
+#endif
 void ctt_setup_console(void)
 {
     SetConsoleOutputCP(CP_UTF8);
@@ -461,7 +504,7 @@ void ctt_setup_console(void) {}
 #endif
 
 Ctt_Results ctt_results;
-sigjmp_buf ctt_jmp_buf;
+CTT_JMP_BUF ctt_jmp_buf;
 
 static Ctt_TestCase ctt_registry[CTT_MAX_TESTS];
 static int ctt_registered_count = 0;
@@ -469,6 +512,17 @@ static const char *ctt_name_filter = NULL;
 
 /* Set inside a signal handler to the signal number; 0 means "no crash". */
 static volatile sig_atomic_t ctt_crash_signal = 0;
+
+/* Bounded copy that always terminates dst. Not strncpy: MSVC deprecates it,
+   and its C11 strncpy_s replacement is missing from glibc. */
+static void ctt_copy_str(char *dst, size_t size, const char *src)
+{
+    size_t n = strlen(src);
+    if (n >= size)
+        n = size - 1;
+    memcpy(dst, src, n);
+    dst[n] = '\0';
+}
 
 void ctt_register(const char *name, ctt_test_fn func)
 {
@@ -495,27 +549,131 @@ void ctt_record_failure(void)
 {
     if (ctt_results.failed_test_count < CTT_MAX_TESTS)
     {
-        CTT_STRNCPY(ctt_results.failed_test_names[ctt_results.failed_test_count],
-                    ctt_results.current_test_name,
-                    sizeof(ctt_results.failed_test_names[0]) - 1);
+        ctt_copy_str(ctt_results.failed_test_names[ctt_results.failed_test_count],
+                     sizeof(ctt_results.failed_test_names[0]),
+                     ctt_results.current_test_name);
         ctt_results.failed_test_count++;
     }
     ctt_results.failed_tests++;
 }
 
 /* Default no-op lifecycle hooks. A suite that defines its own
-   ctt_before_each/ctt_after_each overrides these (strong symbol wins). */
+   ctt_before_each/ctt_after_each overrides these (strong symbol wins).
+   MSVC has no weak symbols. There, /alternatename makes the linker fall back
+   to the defaults only when the suite leaves a hook undefined. */
+#ifdef _MSC_VER
+void ctt_default_before_each(void) {}
+void ctt_default_after_each(void) {}
+#ifdef _M_IX86
+#pragma comment(linker, "/alternatename:_ctt_before_each=_ctt_default_before_each")
+#pragma comment(linker, "/alternatename:_ctt_after_each=_ctt_default_after_each")
+#else
+#pragma comment(linker, "/alternatename:ctt_before_each=ctt_default_before_each")
+#pragma comment(linker, "/alternatename:ctt_after_each=ctt_default_after_each")
+#endif
+#else
 __attribute__((weak)) void ctt_before_each(void) {}
 __attribute__((weak)) void ctt_after_each(void) {}
+#endif
 
 static void ctt_crash_handler(int sig)
 {
+#ifdef _WIN32
+    /* The Windows CRT resets a handler to SIG_DFL before calling it. */
+    signal(sig, ctt_crash_handler);
+#endif
     ctt_crash_signal = sig;
-    siglongjmp(ctt_jmp_buf, 2);
+    CTT_LONGJMP(ctt_jmp_buf, 2);
+}
+
+/* On MSVC, crashes are caught with structured exception handling (SEH)
+   around each test step. The CRT's signal() only reports a few hardware
+   faults (not integer division by zero) and only on the main thread. Each
+   exception is mapped to the matching signal so reporting stays the same.
+   Stack overflow is left alone: recovering from it needs _resetstkoflw().
+   SIGABRT still goes through signal(), because abort() raises it. */
+#ifdef _MSC_VER
+static int ctt_seh_filter(unsigned long code)
+{
+    int sig;
+    switch (code)
+    {
+    case EXCEPTION_ACCESS_VIOLATION:
+    case EXCEPTION_ARRAY_BOUNDS_EXCEEDED:
+    case EXCEPTION_IN_PAGE_ERROR:
+#ifdef CTT_HAS_ASAN
+        return EXCEPTION_CONTINUE_SEARCH; /* let ASan report it */
+#else
+        sig = SIGSEGV;
+        break;
+#endif
+    case EXCEPTION_INT_DIVIDE_BY_ZERO:
+    case EXCEPTION_INT_OVERFLOW:
+    case EXCEPTION_FLT_DIVIDE_BY_ZERO:
+    case EXCEPTION_FLT_INVALID_OPERATION:
+    case EXCEPTION_FLT_OVERFLOW:
+    case EXCEPTION_FLT_UNDERFLOW:
+    case EXCEPTION_FLT_INEXACT_RESULT:
+    case EXCEPTION_FLT_DENORMAL_OPERAND:
+    case EXCEPTION_FLT_STACK_CHECK:
+        sig = SIGFPE;
+        break;
+    case EXCEPTION_ILLEGAL_INSTRUCTION:
+    case EXCEPTION_PRIV_INSTRUCTION:
+        sig = SIGILL;
+        break;
+    default:
+        return EXCEPTION_CONTINUE_SEARCH;
+    }
+    ctt_crash_signal = sig;
+    return EXCEPTION_EXECUTE_HANDLER;
+}
+#endif
+
+/* Runs one step of a test (setup + body, or teardown). Only MSVC needs a
+   guard frame here; elsewhere the signal handlers jump back on their own. */
+static void ctt_run_step(void (*step)(ctt_test_fn), ctt_test_fn func)
+{
+#ifdef _MSC_VER
+    __try
+    {
+        step(func);
+    }
+    __except (ctt_seh_filter(GetExceptionCode()))
+    {
+    }
+#else
+    step(func);
+#endif
+}
+
+static void ctt_step_body(ctt_test_fn func)
+{
+    ctt_before_each();
+    func();
+}
+
+static void ctt_step_teardown(ctt_test_fn func)
+{
+    (void)func;
+    ctt_after_each();
 }
 
 static void ctt_install_crash_handlers(void)
 {
+#ifdef _WIN32
+#ifdef _MSC_VER
+    /* No "abort() has been called" dialog or Windows Error Reporting. */
+    _set_abort_behavior(0, _WRITE_ABORT_MSG | _CALL_REPORTFAULT);
+#else
+    /* MinGW: its CRT routes hardware faults to signal() handlers. */
+    signal(SIGFPE, ctt_crash_handler);
+#ifndef CTT_HAS_ASAN
+    signal(SIGSEGV, ctt_crash_handler);
+#endif
+#endif
+    signal(SIGABRT, ctt_crash_handler);
+#else
     struct sigaction sa;
     memset(&sa, 0, sizeof(sa));
     sa.sa_handler = ctt_crash_handler;
@@ -528,6 +686,7 @@ static void ctt_install_crash_handlers(void)
     sigaction(SIGSEGV, &sa, NULL);
     sigaction(SIGBUS, &sa, NULL);
 #endif
+#endif
 }
 
 static const char *ctt_signal_name(int sig)
@@ -535,7 +694,10 @@ static const char *ctt_signal_name(int sig)
     switch (sig)
     {
     case SIGSEGV: return "SIGSEGV (segmentation fault)";
+#ifdef SIGBUS
     case SIGBUS:  return "SIGBUS (bus error)";
+#endif
+    case SIGILL:  return "SIGILL (illegal instruction)";
     case SIGABRT: return "SIGABRT (abort)";
     case SIGFPE:  return "SIGFPE (arithmetic error)";
     default:      return "signal";
@@ -545,8 +707,7 @@ static const char *ctt_signal_name(int sig)
 void ctt_run_one(const char *name, ctt_test_fn func)
 {
     ctt_results.total_tests++;
-    CTT_STRNCPY(ctt_results.current_test_name, name, sizeof(ctt_results.current_test_name) - 1);
-    ctt_results.current_test_name[sizeof(ctt_results.current_test_name) - 1] = '\0';
+    ctt_copy_str(ctt_results.current_test_name, sizeof(ctt_results.current_test_name), name);
 
     printf("Running: %s", name);
     fflush(stdout);
@@ -558,21 +719,15 @@ void ctt_run_one(const char *name, ctt_test_fn func)
     /* Run setup + body under a jump point. A failed assertion (value 1) or a
        crashing signal (value 2) unwinds back here. */
     ctt_results.jump_active = 1;
-    int jumped = sigsetjmp(ctt_jmp_buf, 1);
-    if (jumped == 0)
-    {
-        ctt_before_each();
-        func();
-    }
+    if (CTT_SETJMP(ctt_jmp_buf) == 0)
+        ctt_run_step(ctt_step_body, func);
 
     /* Teardown always runs, with jumping disabled so a failing assertion there
        records instead of unwinding. A fresh jump point still catches a crash
        during teardown so it can't kill the whole runner. */
     ctt_results.jump_active = 0;
-    if (sigsetjmp(ctt_jmp_buf, 1) == 0)
-    {
-        ctt_after_each();
-    }
+    if (CTT_SETJMP(ctt_jmp_buf) == 0)
+        ctt_run_step(ctt_step_teardown, func);
 
     clock_t end = clock();
     ctt_results.total_time += end - ctt_results.test_start_time;
@@ -590,13 +745,13 @@ void ctt_run_one(const char *name, ctt_test_fn func)
         ctt_results.passed_tests++;
         double t = ((double)(end - ctt_results.test_start_time)) / CLOCKS_PER_SEC;
         if (t > 0.001)
-            printf(" ✅ PASS (%.3fs)\n", t);
+            printf(" " CTT_SYM_PASS " PASS (%.3fs)\n", t);
         else
-            printf(" ✅ PASS\n");
+            printf(" " CTT_SYM_PASS " PASS\n");
     }
     else
     {
-        printf(" ❌ FAIL\n");
+        printf(" " CTT_SYM_FAIL " FAIL\n");
     }
 }
 
@@ -639,11 +794,11 @@ void ctt_print_summary(void)
     {
         printf("\n" CTT_COL_RED CTT_CROSS " Failed tests:" CTT_COL_RESET "\n");
         for (int i = 0; i < ctt_results.failed_test_count; i++)
-            printf("  " CTT_COL_RED "• %s" CTT_COL_RESET "\n", ctt_results.failed_test_names[i]);
+            printf("  " CTT_COL_RED CTT_SYM_BULLET " %s" CTT_COL_RESET "\n", ctt_results.failed_test_names[i]);
     }
     else
     {
-        printf("\n" CTT_COL_GREEN "🎉 All tests passed!" CTT_COL_RESET "\n");
+        printf("\n" CTT_COL_GREEN CTT_SYM_PARTY " All tests passed!" CTT_COL_RESET "\n");
     }
 }
 
@@ -664,7 +819,7 @@ int ctt_main(int argc, char *argv[], const char *suite_title)
 
     if (suite_title)
     {
-        printf("🧪 %s\n", suite_title);
+        printf(CTT_SYM_TEST " %s\n", suite_title);
         for (size_t i = 0; i < strlen(suite_title) + 3; i++)
             putchar('=');
         putchar('\n');

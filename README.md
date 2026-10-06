@@ -11,7 +11,9 @@ and a clean CMake target for `FetchContent`.
 - **Namespaced** — `CTT_*` macros and `ctt_*` symbols, with optional short
   aliases (`TEST`, `ASSERT_EQ`, …) on by default.
 
-Requires GCC or Clang (uses `__attribute__((constructor))` and weak symbols).
+Builds with GCC or Clang on Linux, macOS and the BSDs, and with MSVC, clang-cl
+or MinGW on Windows. Under MSVC, test function names must be unique across the
+whole executable, not just within one `.c` file.
 
 Under a strict `-std=c99` include `ctt.h` before any standard header: it asks
 glibc for the POSIX signal API it needs, and a feature-test macro only counts
@@ -221,6 +223,11 @@ Build your tests with `-fsanitize=address,undefined` for leak / use-after-free /
 UB detection. `SIGSEGV`, `SIGBUS`, `SIGABRT`, and `SIGFPE` are caught: the
 faulting test is reported as `CRASHED` and the runner moves on. Under
 AddressSanitizer, `SIGSEGV`/`SIGBUS` are left to ASan for richer diagnostics.
+
+On Windows the same crashes are caught. MSVC and clang-cl use structured
+exception handling: access violations, integer and floating-point faults and
+illegal instructions are reported under the matching signal name. MinGW uses
+the CRT's `signal()`. A stack overflow is not caught on Windows.
 
 ---
 
