@@ -40,7 +40,9 @@ CTT_TEST(push_then_pop_is_lifo)
 CTT_TEST(push_respects_capacity)
 {
     for (int i = 0; i < CAP; i++)
+    {
         ASSERT_TRUE(push(i));
+    }
     ASSERT_FALSE(push(99)); /* full */
     ASSERT_EQ(CAP, depth);
 }

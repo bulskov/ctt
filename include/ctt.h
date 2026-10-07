@@ -576,7 +576,9 @@ static void ctt_copy_str(char *dst, size_t size, const char *src)
 {
     size_t n = strlen(src);
     if (n >= size)
+    {
         n = size - 1;
+    }
     memcpy(dst, src, n);
     dst[n] = '\0';
 }
@@ -614,7 +616,9 @@ static int ctt_file_rank(const char *file)
 {
     int i = 0;
     while (!ctt_same_file(ctt_registry[i].file, file))
+    {
         i++;
+    }
     return i;
 }
 
@@ -623,8 +627,10 @@ static void ctt_sort_registry(void)
     /* Rank files before moving anything, by their first registration. */
     static int rank[CTT_MAX_TESTS];
     for (int i = 0; i < ctt_registered_count; i++)
+    {
         rank[i] =
             ctt_registry[i].file ? ctt_file_rank(ctt_registry[i].file) : i;
+    }
 
     for (int i = 1; i < ctt_registered_count; i++)
     {
@@ -858,14 +864,18 @@ void ctt_run_one(const char *name, ctt_test_fn func)
        crashing signal (value 2) unwinds back here. */
     ctt_results.jump_active = 1;
     if (CTT_SETJMP(ctt_jmp_buf) == 0)
+    {
         ctt_run_step(ctt_step_body, func);
+    }
 
     /* Teardown always runs, with jumping disabled so a failing assertion there
        records instead of unwinding. A fresh jump point still catches a crash
        during teardown so it can't kill the whole runner. */
     ctt_results.jump_active = 0;
     if (CTT_SETJMP(ctt_jmp_buf) == 0)
+    {
         ctt_run_step(ctt_step_teardown, func);
+    }
 
     clock_t end = clock();
     ctt_results.total_time += end - ctt_results.test_start_time;
@@ -876,7 +886,9 @@ void ctt_run_one(const char *name, ctt_test_fn func)
             "  " CTT_COL_RED CTT_CROSS " CRASH: caught %s" CTT_COL_RESET "\n",
             ctt_signal_name(ctt_crash_signal));
         if (ctt_results.failed_tests == failed_before)
+        {
             ctt_record_failure();
+        }
         printf(" " CTT_COL_RED CTT_CROSS " CRASHED\n" CTT_COL_RESET);
     }
     else if (ctt_results.failed_tests == failed_before)
@@ -885,9 +897,13 @@ void ctt_run_one(const char *name, ctt_test_fn func)
         double t =
             ((double)(end - ctt_results.test_start_time)) / CLOCKS_PER_SEC;
         if (t > 0.001)
+        {
             printf(" " CTT_SYM_PASS " PASS (%.3fs)\n", t);
+        }
         else
+        {
             printf(" " CTT_SYM_PASS " PASS\n");
+        }
     }
     else
     {
@@ -904,12 +920,16 @@ int ctt_run_all(void)
     {
         if (ctt_name_filter
             && strstr(ctt_registry[i].name, ctt_name_filter) == NULL)
+        {
             continue;
+        }
 
         ctt_run_one(ctt_registry[i].name, ctt_registry[i].func);
 
         if (ctt_results.stop_on_first_failure && ctt_results.failed_tests > 0)
+        {
             break;
+        }
     }
 
     ctt_print_summary();
@@ -934,18 +954,22 @@ void ctt_print_summary(void)
             "Total time: " CTT_COL_CYAN "%.3f seconds" CTT_COL_RESET "\n",
             total);
         if (ctt_results.total_tests > 0)
+        {
             printf(
                 "Avg per test: " CTT_COL_CYAN "%.3f seconds" CTT_COL_RESET "\n",
                 total / ctt_results.total_tests);
+        }
     }
 
     if (ctt_results.failed_tests > 0)
     {
         printf("\n" CTT_COL_RED CTT_CROSS " Failed tests:" CTT_COL_RESET "\n");
         for (int i = 0; i < ctt_results.failed_test_count; i++)
+        {
             printf(
                 "  " CTT_COL_RED CTT_SYM_BULLET " %s" CTT_COL_RESET "\n",
                 ctt_results.failed_test_names[i]);
+        }
     }
     else
     {
@@ -963,18 +987,26 @@ int ctt_main(int argc, char *argv[], const char *suite_title)
     for (int i = 1; i < argc; i++)
     {
         if (strcmp(argv[i], "-v") == 0 || strcmp(argv[i], "--verbose") == 0)
+        {
             ctt_set_verbose(1);
+        }
         else if (strcmp(argv[i], "--stop-on-failure") == 0)
+        {
             ctt_set_stop_on_failure(1);
+        }
         else if (strcmp(argv[i], "--filter") == 0 && i + 1 < argc)
+        {
             ctt_set_filter(argv[++i]);
+        }
     }
 
     if (suite_title)
     {
         printf(CTT_SYM_TEST " %s\n", suite_title);
         for (size_t i = 0; i < strlen(suite_title) + 3; i++)
+        {
             putchar('=');
+        }
         putchar('\n');
     }
 
